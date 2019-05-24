@@ -1,0 +1,102 @@
+apiVersion: certmanager.k8s.io/v1alpha1
+kind: Certificate
+metadata:
+  name: hello-kube-cert-tls
+  namespace: default
+spec:
+  secretName: hello-kube-cert-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: hello.kube.dev.dius.com.au
+  dnsNames:
+  - hello.kube.dev.dius.com.au
+  acme:
+    config:
+    - dns01:
+        provider: route53
+      domains:
+      - hello.kube.dev.dius.com.au
+
+---
+
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: default
+spec:
+  tls:
+  - hosts:
+    - hello.kube.dev.dius.com.au
+    secretName: hello-kube-cert-tls
+  rules:
+  - host: hello.kube.dev.dius.com.au
+    http:
+      paths:
+      - path: /
+        backend:
+          serviceName: hello-kubernetes
+          servicePort: http
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: hello-kubernetes
+  name: hello-kubernetes
+spec:
+  ports:
+    - port: 80
+      protocol: TCP
+      targetPort: http
+  selector:
+    app: hello-kubernetes
+  sessionAffinity: None
+  type: ClusterIP
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: hello-kubernetes
+  name: hello-kubernetes
+spec:
+  selector:
+    matchLabels:
+      app: hello-kubernetes
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 0%
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: hello-kubernetes
+    spec:
+      containers:
+        - name: hello-kubernetes
+          image: tutum/hello-world
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              memory: 64Mi
+          ports:
+          - http: 80
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 2
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
